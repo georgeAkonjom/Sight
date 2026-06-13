@@ -4,18 +4,23 @@ A modular, high-performance computer vision application built on MediaPipe Tasks
 
 ## The Idea
 
-Artificial intelligence is limited by data and processing power. Modifying the kind of data we feed to AI is a crucial step forward in optimizing **its overall efficiency and capacity for human-like intuition.**
+AI runs on two things: data and compute. Feed it better data and you get better results, especially when the goal is something that feels intuitive rather than mechanical. Sight and Thought are our take on that. 
 
-Sight and thought, are our attempt at the problem we identified above. Sight collects and synthesizes data from multiple sources, video(hand, pose and face landmarkers), auditory(pending) and textual data, and pieces it all together. This multi-modal structure allows us to carry a lot more meaning in a lot less data, in the same way humans can tell a persons mood(cheery, upset, etc), infer what a person might do and how best to approach and interact with them from just a glance, sight and thought attempts to ma1ke predictions on a persons behavior, what they might say or even do, based on the what they are doing, saying and the way they are behaving currently.
+Sight streams in video (hand, pose and face landmarks), audio (coming), text (coming), and tries to piece it all into something coherent. The idea is to carry more meaning with fewer bytes. The way you can clock someone's mood, guess their next move, and figure out how to approach them in a glance, is what we attempt to do with our models. Sight and Thought tries to predict what a person will say or do based on what's happening right now.
 
-Thought for Disability **provides a crucial assistive tool for neurodivergent individuals or those with sensory processing disorders, offering real-time translations of complex social interactions and subtle emotional cues that might otherwise be missed**, alongside real-time sign language translation for ...
+Thought for Speech is for people who don't read social situations easily. If you are neurodivergent or have a sensory processing disorder, the cues everyone else seems to pick up naturally can just vanish. Even more difficult is communicating to people these cues they seem to understand naturally. This makes them explicit, and shows you the movements to make to communicate at your best!
 
-Thought for speech **empowers those with vocal impairments by converting their expressive gestures, facial landmarks, and distinct body language into fluent, highly contextualized communication.**
-
-Thought takes the synthesized output from sight and looks in over in 2 second blocks, comparing inference from each block to keep context, and returns an abstraction in natural language that describes the scene, mood and body language, of the identified speaker, alongside a natural language summary of all they have said so far. You may prompt it to go into tutor mode, where it shows you poses to take in real time based on what you are currently saying, and corrects on **your physical delivery, offering feedback on how to adjust your posture, eye contact, and hand movements so your non-verbal communication perfectly matches your intended message.**
+Thought for Disability treats movement as language. Sign language, Gestures, expressions, posture, all of it gets converted into speech for people who cannot rely on their voice. Not as words you type, but as something closer to how you already communicate.
 ## Project Overview
 
-The project provides a flexible infrastructure to capture video streams (from local webcams, video files, or remote IP camera streams) and process them using multiple Google MediaPipe task landmarkers concurrently. The architecture is designed to support real-time user-interface interaction, gesture detection, and expression parsing, while maintaining clean separation of concerns and low-latency frame pacing.
+The project can grab input video from webcams, files, or IP cameras and throws it at a bunch of MediaPipe landmarkers at the same time. It is built for real-time use, gesture detection, expression parsing, with the usual concerns about keeping things loosely coupled and fast enough to not lag behind a live feed.
+Plugin-based detector architecture
+Hand, Face, Pose all share a base class called BaseDetector. It defines the lifecycle for each frame:
+- Initialization: Loads model assets, picks sync or async.
+- process_frame: Runs inference in whichever mode you chose.
+- draw: Puts landmarks and connections on the frame using OpenCV.
+- get_latest_data: Hands back predictions as plain dicts or whatever Python structures make sense.
+- close: Tears down the task runners.
 
 ---
 
@@ -112,7 +117,7 @@ The gesture recognition package ([gesture_recognition/](file:///home/sammm/Work/
 - **Micro-expression Detection**: Identifies subtle cues like smirks, squints, raised/skeptical eyebrows, parted lips, and tongue protrusions relative to user baselines.
 - **Pupil & Gaze Stability**: Tracks gaze stability invariant to head rotation, detecting shifty gaze, irregular blinking, and rapid eye movements (saccades).
 
-### 6. Gaze Tracking Module
+### 6. Gaze Tracking Module [BETA]
 The helper class [GazeTracker](file:///home/sammm/Work/Sight/helpers/gaze_tracker.py) enables 3D head pose and gaze vector projection:
 - **CLI Flag `--gaze`**: Automatically enables the Face tracking module and starts interactive calibration.
 - **PnP Head Pose**: Solves the Perspective-n-Point (PnP) problem using key 3D canonical face coordinates and 2D landmarks via OpenCV to determine real-time head yaw, pitch, and roll. Projects 3D coordinate axes directly on the user's nose.
@@ -120,7 +125,7 @@ The helper class [GazeTracker](file:///home/sammm/Work/Sight/helpers/gaze_tracke
 - **9-Point Linear Regression Calibration**: Solves a least-squares polynomial regression to map composite head-pose and pupil offsets directly to screen pixel coordinates. Uses a 9-point screen target grid.
 - **EMA Smoothing**: Applies a low-pass exponential moving average filter to screen gaze coordinates to eliminate jitter.
 
-### 7. Contactless Heart Rate Module
+### 7. Contactless Heart Rate Module [BETA]
 The helper class [HeartRateTracker](file:///home/sammm/Work/Sight/helpers/heart_rate_tracker.py) performs remote photoplethysmography (rPPG):
 - **CLI Flag `--hr`**: Automatically enables the Face tracking module and starts real-time pulse and HRV estimation.
 - **ROI Extraction**: Tracks forehead and left/right cheek regions dynamically scaled to the user's face dimensions.
@@ -140,8 +145,8 @@ The helper class [HeartRateTracker](file:///home/sammm/Work/Sight/helpers/heart_
   - `--pose`: Enable Pose skeletal and metric world landmarks tracking.
   - `--all`: Activate all base trackers (Hand + Face + Pose) simultaneously.
   - `--gesture`: Activate the gesture and body language classification engine.
-  - `--gaze`: Activate 3D gaze estimation and interactive 9-point screen calibration.
-  - `--hr`: Activate contactless rPPG heart rate & HRV (RMSSD) estimation.
+  - `--gaze` `[BETA]`: Activate 3D gaze estimation and interactive 9-point screen calibration.
+  - `--hr` `[BETA]`: Activate contactless rPPG heart rate & HRV (RMSSD) estimation.
 - **Flexibility in Inputs**: Accepts local webcam IDs, pre-recorded video files, or remote streaming sources (RTSP, RTMP, HTTP).
 - **Auto-casting & Normalization**:
   - Auto-casts digit strings (e.g. `--input "0"`) to integers for OpenCV video capture device mapping.
@@ -236,7 +241,7 @@ Run the orchestrator using different flag configurations:
   python main.py --gesture
   ```
 
-- **Run Gaze Tracking & Screen Calibration**:
+- **Run Gaze Tracking & Screen Calibration [BETA]**:
   ```bash
   # This automatically enables face tracking and initiates interactive 9-point calibration
   python main.py --gaze
@@ -247,7 +252,7 @@ Run the orchestrator using different flag configurations:
   3. The red dot will move to a new position. Repeat the process for all 9 points.
   4. Once calibration is complete, the regression model trains automatically, and a **green circle/crosshair** will track and display your real-time gaze look-point.
 
-- **Run Contactless Heart Rate Tracking**:
+- **Run Contactless Heart Rate Tracking [BETA]**:
   ```bash
   # This automatically enables face tracking and starts real-time rPPG analysis
   python main.py --hr
