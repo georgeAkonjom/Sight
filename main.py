@@ -105,6 +105,8 @@ def main():
     parser.add_argument('--pose', action='store_true', help='Enable Pose Tracking')
     parser.add_argument('--all', action='store_true', help='Enable all modules')
     parser.add_argument('--gesture', action='store_true', help='Enable Gesture and Body Language Recognition')
+    parser.add_argument('--gaze', action='store_true', help='Enable 3D Gaze Tracking & Calibration')
+    parser.add_argument('--hr', action='store_true', help='Enable Contactless Heart Rate & HRV Tracking (rPPG)')
     parser.add_argument('--input', type=str, help='Path to input video file, webcam index, or IP URL')
     parser.add_argument('--url', type=str, help='IP Webcam URL (deprecated: use --input instead)')
     parser.add_argument('--output', type=str, help='Path to save the output annotated video (optional)')
@@ -114,13 +116,23 @@ def main():
     
     args = parser.parse_args()
 
+    # If gaze tracking is enabled and face is not specified, enable face tracking
+    if args.gaze and not (args.face or args.all):
+        print("Gaze tracking enabled. Activating Face tracker.")
+        args.face = True
+
+    # If heart rate tracking is enabled and face is not specified, enable face tracking
+    if args.hr and not (args.face or args.all):
+        print("Heart rate tracking enabled. Activating Face tracker.")
+        args.face = True
+
     # If gesture recognition is enabled and no specific detector is specified, default to --all
     if args.gesture and not (args.hand or args.face or args.pose or args.all):
         print("Gesture recognition enabled. Activating all tracker modules (hand, face, pose).")
         args.all = True
 
     # If no flags are provided, default to --hand
-    if not (args.hand or args.face or args.pose or args.all or args.gesture):
+    if not (args.hand or args.face or args.pose or args.all or args.gesture or args.gaze or args.hr):
         print("No module specified. Defaulting to Hand Tracking.")
         args.hand = True
 
@@ -171,6 +183,16 @@ def main():
         from gesture_recognition.evaluator import GestureEvaluator
         gesture_evaluator = GestureEvaluator()
 
+    gaze_tracker = None
+    if args.gaze:
+        from helpers.gaze_tracker import GazeTracker
+        gaze_tracker = GazeTracker()
+
+    hr_tracker = None
+    if args.hr:
+        from helpers.heart_rate_tracker import HeartRateTracker
+        hr_tracker = HeartRateTracker()
+
     cap = cv2.VideoCapture(video_source)
     
     if not cap.isOpened():
@@ -198,6 +220,17 @@ def main():
     print(f"Running mode: {mode_str}")
     if not args.headless:
         print("Press 'q' to quit.")
+
+    # Gaze calibration and smoothing state variables
+    calibration_targets = [
+        (0.1, 0.1), (0.5, 0.1), (0.9, 0.1),
+        (0.1, 0.5), (0.5, 0.5), (0.9, 0.5),
+        (0.1, 0.9), (0.5, 0.9), (0.9, 0.9)
+    ]
+    calibration_idx = 0
+    capture_frames = 0
+    gaze_smoothed = None
+    alpha = 0.25
 
     frame_count = 0
     try:
@@ -254,6 +287,114 @@ def main():
                 )
                 draw_gesture_overlay(frame, gesture_results)
 
+            # 4. Perform gaze tracking and calibration overlay if enabled
+            if gaze_tracker:
+                h, w, _ = frame.shape
+                face_landmarks = None
+                for detector in active_detectors:
+                    if detector.__class__.__name__ == 'FaceDetectorWrapper':
+                        f_data = detector.get_latest_data()
+                        if f_data:
+                            face_landmarks = f_data[0]['landmarks']
+                
+                if face_landmarks:
+                    # Draw 3D head pose coordinate axes and metadata
+                    gaze_tracker.draw_gaze_debug(frame, face_landmarks)
+                    
+                    # Calibration state machine
+                    if calibration_idx < len(calibration_targets):
+                        tx_rel, ty_rel = calibration_targets[calibration_idx]
+                        tx_px, ty_px = int(tx_rel * w), int(ty_rel * h)
+                        
+                        # Draw visual target on frame
+                        cv2.circle(frame, (tx_px, ty_px), 12, (0, 0, 255), -1)
+                        cv2.circle(frame, (tx_px, ty_px), 6, (255, 255, 255), -1)
+                        
+                        # Overlay instructions
+                        cv2.putText(frame, f"CALIBRATION TARGET {calibration_idx+1}/9", (tx_px - 80, ty_px - 20),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 0, 255), 1, cv2.LINE_AA)
+                        cv2.putText(frame, "Look at RED DOT, press SPACE to capture", (20, 60),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1, cv2.LINE_AA)
+                        
+                        if capture_frames > 0:
+                            success = gaze_tracker.record_calibration_frame(face_landmarks, (h, w), tx_px, ty_px)
+                            if success:
+                                capture_frames -= 1
+                                # Visual feedback for frame capture
+                                cv2.rectangle(frame, (tx_px - 15, ty_px - 15), (tx_px + 15, ty_px + 15), (0, 255, 0), 2)
+                                if capture_frames == 0:
+                                    calibration_idx += 1
+                                    if calibration_idx == len(calibration_targets):
+                                        gaze_tracker.train()
+                    
+                    # Active gaze tracking phase (once calibrated)
+                    elif gaze_tracker.calibrated:
+                        gaze_coords = gaze_tracker.predict(face_landmarks, (h, w))
+                        if gaze_coords is not None:
+                            gx, gy = gaze_coords
+                            # Apply exponential moving average (EMA) smoothing
+                            if gaze_smoothed is None:
+                                gaze_smoothed = (gx, gy)
+                            else:
+                                gaze_smoothed = (
+                                    alpha * gx + (1 - alpha) * gaze_smoothed[0],
+                                    alpha * gy + (1 - alpha) * gaze_smoothed[1]
+                                )
+                            gx, gy = gaze_smoothed
+                            
+                            # Clip to screen boundaries
+                            gx_clipped = max(0, min(w - 1, int(gx)))
+                            gy_clipped = max(0, min(h - 1, int(gy)))
+                            
+                            # Draw gaze look point cursor
+                            cv2.drawMarker(frame, (gx_clipped, gy_clipped), (0, 255, 0), cv2.MARKER_CROSS, 20, 2)
+                            cv2.circle(frame, (gx_clipped, gy_clipped), 8, (0, 255, 0), 2)
+                            cv2.putText(frame, f"Gaze: ({gx_clipped}, {gy_clipped})", (gx_clipped + 15, gy_clipped - 10),
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 0), 1, cv2.LINE_AA)
+
+            # 5. Perform contactless heart rate tracking if enabled
+            if hr_tracker:
+                h, w, _ = frame.shape
+                face_landmarks = None
+                for detector in active_detectors:
+                    if detector.__class__.__name__ == 'FaceDetectorWrapper':
+                        f_data = detector.get_latest_data()
+                        if f_data:
+                            face_landmarks = f_data[0]['landmarks']
+                
+                if face_landmarks:
+                    hr_tracker.update(frame, face_landmarks, fps=fps)
+                    
+                    # Draw biometrics card in top-left (width 240px, height 140px)
+                    card_w, card_h = 240, 140
+                    draw_semi_transparent_rect(frame, (10, 10), (10 + card_w, 10 + card_h), (20, 20, 20), 0.65)
+                    cv2.rectangle(frame, (10, 10), (10 + card_w, 10 + card_h), (0, 0, 255), 1)
+                    
+                    cv2.putText(frame, "SIGHT BIOMETRICS", (20, 35),
+                                cv2.FONT_HERSHEY_DUPLEX, 0.5, (0, 0, 255), 1, cv2.LINE_AA)
+                    
+                    if not hr_tracker.calibrated:
+                        progress = int((len(hr_tracker.rgb_buffer) / hr_tracker.buffer_size) * 100)
+                        cv2.putText(frame, f"Pulse: Calibrating...", (20, 65),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 165, 255), 1, cv2.LINE_AA)
+                        # Draw a small loading progress bar
+                        bar_w = 200
+                        bar_x = 20
+                        bar_y = 80
+                        cv2.rectangle(frame, (bar_x, bar_y), (bar_x + bar_w, bar_y + 8), (50, 50, 50), -1)
+                        cv2.rectangle(frame, (bar_x, bar_y), (bar_x + int(bar_w * progress / 100), bar_y + 8), (0, 165, 255), -1)
+                        cv2.putText(frame, f"{progress}%", (bar_x + bar_w + 10, bar_y + 8),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 165, 255), 1, cv2.LINE_AA)
+                    else:
+                        # Draw heart rate and HRV
+                        cv2.putText(frame, f"Heart Rate: {hr_tracker.bpm:.1f} BPM", (20, 65),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 0), 1, cv2.LINE_AA)
+                        cv2.putText(frame, f"HRV (RMSSD): {hr_tracker.hrv:.1f} ms", (20, 85),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 0), 1, cv2.LINE_AA)
+                        
+                        # Draw the moving graph inside the card at the bottom
+                        hr_tracker.draw_ppg_graph(frame, x_start=20, y_center=115, width=220, height=35)
+
             if out:
                 out.write(frame)
 
@@ -262,8 +403,13 @@ def main():
                 
                 # Pacing for file streams; minimal delay for live camera
                 delay = max(1, int(1000 / fps)) if running_mode == vision.RunningMode.VIDEO else 1
-                if cv2.waitKey(delay) & 0xFF == ord('q'):
+                key_pressed = cv2.waitKey(delay) & 0xFF
+                
+                if key_pressed == ord('q'):
                     break
+                elif key_pressed == ord(' ') and gaze_tracker and calibration_idx < len(calibration_targets):
+                    capture_frames = 15
+                    print(f"Triggered sample capture for target {calibration_idx+1}/9...")
 
     finally:
         print("\nCleaning up...")

@@ -261,3 +261,63 @@ class GazeTracker:
         cv2.putText(frame, f"Head Yaw: {yaw:.1f} deg", (20, h - y_offset * 3), font, scale, color, thickness)
         cv2.putText(frame, f"Head Pitch: {pitch:.1f} deg", (20, h - y_offset * 2), font, scale, color, thickness)
         cv2.putText(frame, f"Pupil Offset (L): ({dx_l:.2f}, {dy_l:.2f})", (20, h - y_offset * 1), font, scale, color, thickness)
+
+if __name__ == "__main__":
+    print("Testing GazeTracker with mock data...")
+    tracker = GazeTracker()
+    
+    # Create mock landmarks (478 points)
+    mock_landmarks = [{'x': 0.5, 'y': 0.5, 'z': 0.0} for _ in range(478)]
+    
+    # Assign distinct coordinates to the 6 PnP indices to avoid collinearity
+    # indices: Nose=4, Chin=152, L Eye Outer=33, R Eye Outer=263, L Mouth=61, R Mouth=291
+    mock_landmarks[4] = {'x': 0.5, 'y': 0.45, 'z': 0.0}
+    mock_landmarks[152] = {'x': 0.5, 'y': 0.75, 'z': -0.1}
+    mock_landmarks[33] = {'x': 0.4, 'y': 0.35, 'z': -0.15}
+    mock_landmarks[263] = {'x': 0.6, 'y': 0.35, 'z': -0.15}
+    mock_landmarks[61] = {'x': 0.45, 'y': 0.6, 'z': -0.1}
+    mock_landmarks[291] = {'x': 0.55, 'y': 0.6, 'z': -0.1}
+    
+    # Eye corners for pupil calculation
+    # L Eye: outer=33, inner=133, pupil=468
+    mock_landmarks[133] = {'x': 0.46, 'y': 0.35, 'z': -0.12}
+    mock_landmarks[468] = {'x': 0.43, 'y': 0.35, 'z': -0.13} # Slightly offset pupil
+    
+    # R Eye: outer=263, inner=362, pupil=473
+    mock_landmarks[362] = {'x': 0.54, 'y': 0.35, 'z': -0.12}
+    mock_landmarks[473] = {'x': 0.57, 'y': 0.35, 'z': -0.13}
+
+    frame_size = (480, 640)
+    
+    # Record mock calibration frames at 9 screen targets
+    targets = [
+        (64, 48), (320, 48), (576, 48),
+        (64, 240), (320, 240), (576, 240),
+        (64, 432), (320, 432), (576, 432)
+    ]
+    
+    print("Recording calibration frames...")
+    for tx, ty in targets:
+        # Record 5 frames per target
+        for _ in range(5):
+            # Add small random noise to simulate real fluctuations
+            temp_landmarks = []
+            for lm in mock_landmarks:
+                temp_landmarks.append({
+                    'x': lm['x'] + np.random.normal(0, 0.001),
+                    'y': lm['y'] + np.random.normal(0, 0.001),
+                    'z': lm['z']
+                })
+            success = tracker.record_calibration_frame(temp_landmarks, frame_size, tx, ty)
+            assert success, "Failed to record calibration frame"
+
+    print("Training GazeTracker regression model...")
+    success = tracker.train()
+    assert success, "Failed to train model"
+    assert tracker.calibrated, "Tracker should be marked calibrated"
+    
+    print("Testing active prediction...")
+    pred = tracker.predict(mock_landmarks, frame_size)
+    assert pred is not None, "Prediction should not be None"
+    print(f"Prediction result: {pred}")
+    print("GazeTracker tests passed successfully!")

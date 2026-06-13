@@ -112,6 +112,24 @@ The gesture recognition package ([gesture_recognition/](file:///home/sammm/Work/
 - **Micro-expression Detection**: Identifies subtle cues like smirks, squints, raised/skeptical eyebrows, parted lips, and tongue protrusions relative to user baselines.
 - **Pupil & Gaze Stability**: Tracks gaze stability invariant to head rotation, detecting shifty gaze, irregular blinking, and rapid eye movements (saccades).
 
+### 6. Gaze Tracking Module
+The helper class [GazeTracker](file:///home/sammm/Work/Sight/helpers/gaze_tracker.py) enables 3D head pose and gaze vector projection:
+- **CLI Flag `--gaze`**: Automatically enables the Face tracking module and starts interactive calibration.
+- **PnP Head Pose**: Solves the Perspective-n-Point (PnP) problem using key 3D canonical face coordinates and 2D landmarks via OpenCV to determine real-time head yaw, pitch, and roll. Projects 3D coordinate axes directly on the user's nose.
+- **Pupil Offset Integration**: Tracks relative iris positions normalized by eye corner distance for rotation-invariant gaze offsets.
+- **9-Point Linear Regression Calibration**: Solves a least-squares polynomial regression to map composite head-pose and pupil offsets directly to screen pixel coordinates. Uses a 9-point screen target grid.
+- **EMA Smoothing**: Applies a low-pass exponential moving average filter to screen gaze coordinates to eliminate jitter.
+
+### 7. Contactless Heart Rate Module
+The helper class [HeartRateTracker](file:///home/sammm/Work/Sight/helpers/heart_rate_tracker.py) performs remote photoplethysmography (rPPG):
+- **CLI Flag `--hr`**: Automatically enables the Face tracking module and starts real-time pulse and HRV estimation.
+- **ROI Extraction**: Tracks forehead and left/right cheek regions dynamically scaled to the user's face dimensions.
+- **POS Algorithm**: Implements the Plane-Orthogonal-to-Skin (POS) algorithm to extract the Blood Volume Pulse (BVP) signal while minimizing movement and illumination noise.
+- **FFT Ideal Filter**: Applies a zero-latency ideal bandpass filter using FFT/IFFT between 0.75 Hz and 3.0 Hz (45 to 180 bpm).
+- **Interpolated Peak Frequency**: Zero-pads BVP signals to 2048 samples prior to FFT, yielding highly precise heart rate estimation.
+- **Heart Rate Variability (HRV)**: Performs discrete peak detection to compute successive Inter-Beat Intervals (IBIs) and outputs the Root Mean Square of Successive Differences (RMSSD) metric in milliseconds.
+- **Scrolling Waveform Graph**: Renders a custom-drawn moving photoplethysmogram (PPG) graph directly onto the OpenCV window interface.
+
 ---
 
 ## Command Line Orchestrator
@@ -212,6 +230,28 @@ Run the orchestrator using different flag configurations:
   # This automatically enables all detectors (Hand, Face, Pose) and evaluates 90+ gestures / body language indicators
   python main.py --gesture
   ```
+
+- **Run Gaze Tracking & Screen Calibration**:
+  ```bash
+  # This automatically enables face tracking and initiates interactive 9-point calibration
+  python main.py --gaze
+  ```
+  **How to perform the Gaze Calibration:**
+  1. A **red dot** will appear on the window as the current calibration target (e.g., Target `1/9`).
+  2. Focus your eyes on the center of the red dot and press the **`SPACE` bar**. The window will capture 15 calibration frames (flashing a green square).
+  3. The red dot will move to a new position. Repeat the process for all 9 points.
+  4. Once calibration is complete, the regression model trains automatically, and a **green circle/crosshair** will track and display your real-time gaze look-point.
+
+- **Run Contactless Heart Rate Tracking**:
+  ```bash
+  # This automatically enables face tracking and starts real-time rPPG analysis
+  python main.py --hr
+  ```
+  **How it works:**
+  1. The program tracks the forehead and cheeks, extracting mean color values to filter out sensor noise.
+  2. The first 150 frames (~5 seconds at 30 FPS) are used to calibrate/fill the buffer (progress bar shown).
+  3. Once full, the POS algorithm isolates the pulse signal, zero-padded FFT computes the heart rate, and peak detection determines the HRV (RMSSD).
+  4. Renders a real-time biometrics overlay card in the top-left corner, including a scrolling PPG pulse waveform graph.
 
 - **Process a video file synchronously and save annotated output**:
   ```bash
