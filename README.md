@@ -134,9 +134,14 @@ The helper class [HeartRateTracker](file:///home/sammm/Work/Sight/helpers/heart_
 
 ## Command Line Orchestrator
 
-The main entry point, [main.py](file:///home/sammm/Work/Sight/main.py), handles resource orchestration and program options:
-
-- **Dynamic Module Activation**: Enables individual activation or concurrent tracking of multiple modalities (e.g. Hand + Face + Pose) via CLI arguments.
+- **Dynamic Module Activation**: Enables individual activation or concurrent tracking of multiple modalities via CLI flags:
+  - `--hand`: Enable Hand tracking.
+  - `--face`: Enable Face mesh, blendshapes, and head pose tracking.
+  - `--pose`: Enable Pose skeletal and metric world landmarks tracking.
+  - `--all`: Activate all base trackers (Hand + Face + Pose) simultaneously.
+  - `--gesture`: Activate the gesture and body language classification engine.
+  - `--gaze`: Activate 3D gaze estimation and interactive 9-point screen calibration.
+  - `--hr`: Activate contactless rPPG heart rate & HRV (RMSSD) estimation.
 - **Flexibility in Inputs**: Accepts local webcam IDs, pre-recorded video files, or remote streaming sources (RTSP, RTMP, HTTP).
 - **Auto-casting & Normalization**:
   - Auto-casts digit strings (e.g. `--input "0"`) to integers for OpenCV video capture device mapping.
