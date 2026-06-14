@@ -82,8 +82,11 @@ python main.py --hand --input "http://192.168.1.100:8080"
 ## The Idea
 AI runs on two things: data and compute. Feed it better data and you get better results, especially when the goal is something that feels intuitive rather than mechanical. Sight and Thought are our take on that.
 ### "Sight": Our Multi-Modal Context Engine
-Sight streams in video (hand, pose and face landmarks), audio (coming), text (coming), and tries to piece it all into something coherent. The idea is to carry more meaning with fewer bytes. The way you can clock someone's mood, guess their next move, and figure out how to approach them in a glance, is what we attempt to do with our models. Sight and Thought tries to predict what a person will say or do based on what's happening right now.
-Thought for Speech is for people who don't read social situations easily. If you are neurodivergent or have a sensory processing disorder, the cues everyone else seems to pick up naturally can just vanish. Even more difficult is communicating to people these cues they seem to understand naturally. This makes them explicit, and shows you the movements to make to communicate at your best!
+Sight streams in video (hand, pose and face landmarks), audio (coming), text (coming), and tries to piece it all into something coherent. The idea is to carry more meaning with fewer bytes. The way you can clock someone's mood, guess their next move, and figure out how to approach them in a glance, is what we attempt to do with our models. 
+Sight and Thought try to predict what a person will say or do based on what's happening right now.
+
+Thought for Speech is for people who don't read social situations easily. If you are neurodivergent or have a sensory processing disorder, the cues everyone else seems to pick up naturally can just vanish. Even more difficult is communicating to people these cues they seem to understand naturally. This makes them explicit, and shows you the movements to help you to communicate at your best!
+
 Thought for Disability treats movement as language. Sign language, Gestures, expressions, posture, all of it gets converted into speech for people who cannot rely on their voice. Not as words you type, but as something closer to how you already communicate.
 ## Planned Features & Future Implications
 As the project continues to evolve, we are actively expanding our capabilities. Here is a look at what is on our roadmap:
