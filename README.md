@@ -124,39 +124,7 @@ This base class defines a standard lifecycle for processing frames:
  * **process_frame:** Coordinates inference requests based on the designated running mode.
  * **draw:** Superimposes annotated landmarks and connections onto the visual frame using OpenCV.
  * **get_latest_data:** Formats predictions into clean, serializable Python structures for downstream consumption.
- * **close:** Properly disposes of task runners.
-```mermaid
-classDiagram
-    class BaseDetector {
-        +model_path: str
-        +running_mode: RunningMode
-        +latest_result: Any
-        +detector: Any
-        +process_frame(mp_image, timestamp_ms)
-        +draw(frame)*
-        +get_latest_data()* List
-        +close()
-    }
-    class HandDetectorWrapper {
-        +translator: CoordinateTranslator
-        +draw(frame)
-        +get_latest_data() List
-    }
-    class FaceDetectorWrapper {
-        +translator: CoordinateTranslator
-        +draw(frame)
-        +get_latest_data() List
-    }
-    class PoseDetectorWrapper {
-        +translator: CoordinateTranslator
-        +draw(frame)
-        +get_latest_data() List
-    }
-    BaseDetector <|-- HandDetectorWrapper
-    BaseDetector <|-- FaceDetectorWrapper
-    BaseDetector <|-- PoseDetectorWrapper
-
-```
+ * **close:** Properly disposes of task runners
 ### Dual-Mode Execution Model
 The detectors support two execution profiles defined by MediaPipe's RunningMode:
  1. **LIVE_STREAM (Asynchronous):** Designed for webcams and interactive applications. Inference is dispatched asynchronously using detect_async without blocking the main OpenCV video loop. A dedicated callback function (_result_callback) handles incoming predictions from background worker threads, ensuring the UI remains highly responsive even when inference latency fluctuates.
